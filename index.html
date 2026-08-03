@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Академия МГ2022 — Личный кабинет</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=20260726_bg23">
+  <!-- Alpine.js Core -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body x-data="portalApp()">
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar" :class="{ 'open': isMobileMenuOpen }">
+    <div class="sidebar-header">
+      <div class="logo-icon">🔥</div>
+      <div class="logo-text">
+        <h1>MG2022</h1>
+        <span>Web Academy</span>
+      </div>
+    </div>
+    <div class="search-box">
+      <input type="text" class="search-input" x-model="searchQuery" placeholder="🔍 Поиск лекций, конспектов...">
+    </div>
+    <div class="modules-list" id="modules-list">
+      <template x-for="(mod, index) in filteredModules" :key="mod.id || index">
+        <button class="module-btn" 
+                :class="{ 'active': activeModuleId === mod.id }"
+                @click="selectModule(mod.id)">
+          <span class="module-icon" x-text="getEmoji(mod.title)"></span>
+          <span class="module-title" x-text="cleanTitle(mod.title)"></span>
+          <span class="module-count" x-text="mod.lessons.length"></span>
+        </button>
+      </template>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <header class="header">
+      <div style="display:flex;align-items:center;gap:15px;">
+        <button class="menu-toggle" @click="isMobileMenuOpen = !isMobileMenuOpen">☰</button>
+        <div class="header-title">
+          <h2 x-text="activeModule ? activeModule.title : 'Загрузка модуля...'"></h2>
+          <p x-text="activeModule ? 'Выберите материал для изучения' : 'Выберите модуль в боковом меню'"></p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="stat-badge">📚 Уроков: <strong x-text="activeModule ? activeModule.lessons.length : 0"></strong></div>
+      </div>
+    </header>
+
+    <div class="content-area">
+      <div class="lessons-grid" id="lessons-grid">
+        <template x-for="lesson in filteredLessons" :key="lesson.id">
+          <div class="lesson-card" x-data="{ expanded: false, items: getLessonItems(lesson) }">
+            <div class="lesson-header">
+              <h3 class="lesson-title" x-text="lesson.title"></h3>
+            </div>
+            
+            <div class="lesson-badges">
+              <template x-if="lesson.videos && lesson.videos.length > 0">
+                <span class="badge badge-vid">📹 Видео (<span x-text="lesson.videos.length"></span>)</span>
+              </template>
+              <template x-if="lesson.pdfs && lesson.pdfs.length > 0">
+                <span class="badge badge-pdf">📄 Конспекты (<span x-text="lesson.pdfs.length"></span>)</span>
+              </template>
+              <template x-if="lesson.htmls && lesson.htmls.length > 0">
+                <span class="badge badge-html">🌐 HTML</span>
+              </template>
+            </div>
+
+            <div class="lesson-files" x-show="items.length > 0">
+              <template x-for="(item, index) in items" :key="index">
+                <button class="file-link" @click="openPlayer(lesson.id, index)" x-show="expanded || index < 5">
+                  <div class="file-info">
+                    <span x-text="getMaterialIcon(item.type)"></span>
+                    <span x-text="item.displayTitle"></span>
+                  </div>
+                  <span class="file-size" x-text="getMaterialMeta(item)"></span>
+                </button>
+              </template>
+              
+              <button class="show-more-btn" x-show="!expanded && items.length > 5" @click="expanded = true">
+                Показать ещё <span x-text="items.length - 5"></span> ⬇️
+              </button>
+              <button class="show-more-btn" x-show="expanded && items.length > 5" @click="expanded = false">
+                Свернуть ⬆️
+              </button>
+            </div>
+          </div>
+        </template>
+        <template x-if="filteredLessons.length === 0 && activeModule">
+          <div class="no-results">По вашему запросу ничего не найдено 😔</div>
+        </template>
+      </div>
+    </div>
+  </main>
+
+  <!-- Player Modal -->
+  <div class="modal-overlay" :class="{ 'active': player.isOpen }" x-show="player.isOpen" style="display:none;" @click.self="closePlayer()">
+    
+    <button class="gallery-nav left desktop-only" title="Предыдущий файл" x-show="player.hasPrev" @click="prevItem()">❮</button>
+    
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title" x-text="player.title"></div>
+        <button class="close-btn" @click="closePlayer()">&times;</button>
+      </div>
+      <div class="modal-body">
+        
+        <div class="player-container">
+          <template x-if="player.currentSource && player.currentSource.type === 'iframe'">
+            <iframe :src="player.currentSource.url" allowfullscreen allow="autoplay"></iframe>
+          </template>
+          <template x-if="player.currentSource && player.currentSource.type === 'video'">
+            <video :src="player.currentSource.url" controls autoplay playsinline></video>
+          </template>
+        </div>
+        
+        <!-- Mobile Gallery Navigation -->
+        <div class="mobile-gallery-nav" x-show="player.hasPrev || player.hasNext">
+          <button class="mob-gallery-btn" x-bind:style="!player.hasPrev && 'visibility:hidden'" @click="prevItem()">❮ Пред.</button>
+          <button class="mob-gallery-btn" x-bind:style="!player.hasNext && 'visibility:hidden'" @click="nextItem()">След. ❯</button>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+          <span style="font-size:13px;color:var(--text-muted);">📡 Источник потока:</span>
+          <div class="stream-sources">
+            <template x-for="(source, index) in player.sources" :key="index">
+              <div class="source-group" :class="{'active': player.currentSource === source, 'has-dropdown': source.isAudio}">
+                <button class="source-btn-main" @click="setSource(source)">
+                  <span x-html="source.label"></span>
+                </button>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Timecode & Bookmarks Panel -->
+        <div class="timecode-panel" x-show="player.showTimecodes">
+          <div class="tc-header">
+            <div class="tc-status">
+              <span>⏱️ Сохранённый таймкод:</span>
+              <strong x-text="formatTime(player.savedTime)"></strong>
+              <button class="tc-btn-small" @click="jumpToSavedTime()" title="Перейти к сохранённому времени">⏭ Перейти</button>
+            </div>
+            <div class="tc-actions">
+              <button class="tc-btn" @click="saveCurrentTimecode()">💾 Запомнить время</button>
+              <button class="tc-btn tc-btn-add" @click="addBookmark()">➕ Заметка</button>
+            </div>
+          </div>
+          <div class="tc-bookmarks">
+            <template x-for="bm in player.bookmarks" :key="bm.id">
+              <div class="bookmark-item">
+                <button class="bookmark-time" @click="jumpToTime(bm.time)" x-text="formatTime(bm.time)"></button>
+                <div class="bookmark-note" x-text="bm.note"></div>
+                <button class="bookmark-del" @click="deleteBookmark(bm.id)" title="Удалить">🗑️</button>
+              </div>
+            </template>
+            <template x-if="player.bookmarks.length === 0">
+              <div style="font-size:12px;color:var(--text-muted);font-style:italic;padding:5px 0;">
+                Нет сохраненных заметок.
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button class="gallery-nav right desktop-only" title="Следующий файл" x-show="player.hasNext" @click="nextItem()">❯</button>
+  </div>
+
+  <script src="course_data.js?v=20260726_bg23"></script>
+  <script src="app.js?v=20260726_bg23"></script>
+</body>
+</html>
